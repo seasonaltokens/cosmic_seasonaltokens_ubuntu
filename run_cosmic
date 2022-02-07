@@ -4,22 +4,33 @@ NUM_CARDS=`lspci | grep NVIDIA | grep VGA | wc -l`
 LOC=`dirname $(readlink -f $0)`
 TOKENS=(spring summer autumn winter)
 
+function enable_all_cards() {
+    if [[ $NUM_CARDS -gt 1 ]] ; then
+        for i in $(seq 2 $NUM_CARDS) ; do
+            mkdir -p card_$i
+            j=$((i-1))
+            echo "24 $j" > card_$i/0xbtc.conf
+            cp card_1/cosmic_input card_$i/
+        done
+    fi
+}
+
 function run_on_card () {
     POOLS=(spring summer autumn winter)
     TOKEN_FILE="$LOC/card_$1/pool"
     PIDFILE="$LOC/card_$1/cosmic.pid"
 
-    COSMIC_INSTANCES=`pgrep cosmic_input`
     if [[ -e $PIDFILE ]] ; then
         CPID=`cat $PIDFILE`
-        for p in $COSMIC_INSTANCES ; do
-            if [[ $p == $CPID ]] ; then
-                kill -15 $p
-                rm $PIDFILE
+        if [[ "$CPID" != "" ]] ; then
+            comm=$(basename `ps -p $CPID -o command -h | cut -d\  -f2`)
+            if [[ "$comm" == "cosmic_input" ]] ; then
+                kill -15 $CPID
             fi
-        done
+            rm $PIDFILE
+        fi
     fi
-     
+
     if [[ $# -eq 2 ]] ; then
         # with two arguments, we should switch pools before running
         if [[ " ${POOLS[*]} " =~ " ${2} " ]] ; then
@@ -35,11 +46,12 @@ function run_on_card () {
         echo $TOKEN > $TOKEN_FILE
     fi
 
+    CILOC="$LOC/card_$1/cosmic_input"
     TMUX_RUNNING=`tmux has-session -t cosmic >/dev/null 2>&1`
     if [[ $? -eq 1 ]] ; then
-        (cd $LOC/card_$1 && tmux new-session -d -s cosmic -n card-$1 './cosmic_input' ; sleep 0.5; pgrep -n cosmic_input >$PIDFILE)
+        tmux new-session -d -s cosmic -n card-$1 "$CILOC"
     else
-        (cd $LOC/card_$1 && tmux new-window -d -n card-$1 -t cosmic: './cosmic_input' ; sleep 0.5; pgrep -n cosmic_input >$PIDFILE)
+        tmux new-window -d -t cosmic: -n card-$1 "$CILOC"
     fi
     echo "Mining $TOKEN token on card $1"
 }
@@ -58,6 +70,7 @@ if [[ "$1" == "-h" ]] ; then
     usage
 fi
 
+enable_all_cards
 
 if [[ $# -eq 0 ]] ; then
     # With no arguments, run on cosmic miner on all cards
