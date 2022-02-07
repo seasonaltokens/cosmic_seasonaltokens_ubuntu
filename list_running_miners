@@ -1,0 +1,60 @@
+#!/bin/bash
+NUM_CARDS=`lspci | grep NVIDIA | grep VGA | wc -l`
+LOC=`dirname $(readlink -f $0)`
+
+function is_pid_running() {
+    if [[ $# -lt 2 ]] ; then
+        return 2
+    fi
+
+    if [[ ! $1 =~ ^-?[0-9]+$ ]] ; then
+        # don't allow non-integer pids
+        return 2
+    fi
+
+    MYPID=$1
+    ALL_INSTANCES=`pgrep $2`
+    for p in $ALL_INSTANCES ; do
+        if [[ $p == $MYPID ]] ; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+function card_status() {
+    if [[ $# -lt 1 ]] ; then
+        return 2
+    fi
+
+    TOKEN_FILE="$LOC/card_$1/pool"
+    PIDFILE="$LOC/card_$1/cosmic.pid"
+
+    if [[ ! -e $PIDFILE ]] ; then
+        return 1
+    fi
+
+    MYPID=`cat $PIDFILE`
+    is_pid_running ${MYPID} cosmic_input
+    PID_RUNNING=$?
+
+    if [[ -e $TOKEN_FILE ]] ; then
+       echo `cat $TOKEN_FILE`
+    else 
+       # fall back to the last mined token if we're not saving state
+       echo `$LOC/.sp | sed 's/Current mining pool is //g'`
+    fi
+
+    return $PID_RUNNING
+}
+
+
+for i in $(seq 1 $NUM_CARDS) ; do
+    CARD_STATUS=$(card_status $i)
+    if [[ $? -eq 0 ]] ; then
+        echo "Card $i: mining $CARD_STATUS"
+    else
+        echo "Card $i: not running"
+    fi
+done
+

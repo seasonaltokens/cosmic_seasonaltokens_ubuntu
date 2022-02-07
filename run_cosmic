@@ -1,0 +1,90 @@
+#!/bin/bash
+
+NUM_CARDS=`lspci | grep NVIDIA | grep VGA | wc -l`
+LOC=`dirname $(readlink -f $0)`
+TOKENS=(spring summer autumn winter)
+
+function run_on_card () {
+    POOLS=(spring summer autumn winter)
+    TOKEN_FILE="$LOC/card_$1/pool"
+    PIDFILE="$LOC/card_$1/cosmic.pid"
+
+    COSMIC_INSTANCES=`pgrep cosmic_input`
+    if [[ -e $PIDFILE ]] ; then
+        CPID=`cat $PIDFILE`
+        for p in $COSMIC_INSTANCES ; do
+            if [[ $p == $CPID ]] ; then
+                kill -15 $p
+                rm $PIDFILE
+            fi
+        done
+    fi
+     
+    if [[ $# -eq 2 ]] ; then
+        # with two arguments, we should switch pools before running
+        if [[ " ${POOLS[*]} " =~ " ${2} " ]] ; then
+            echo $2 > $TOKEN_FILE
+        fi
+    fi
+
+    if [[ -e $TOKEN_FILE ]] ; then
+        TOKEN=$(cat $TOKEN_FILE)
+        $LOC/.sp $TOKEN >/dev/null
+    else
+        TOKEN=`$LOC/.sp | sed 's/Current mining pool is //g'`
+        echo $TOKEN > $TOKEN_FILE
+    fi
+
+    TMUX_RUNNING=`tmux has-session -t cosmic >/dev/null 2>&1`
+    if [[ $? -eq 1 ]] ; then
+        (cd $LOC/card_$1 && tmux new-session -d -s cosmic -n card-$1 './cosmic_input' ; sleep 0.5; pgrep -n cosmic_input >$PIDFILE)
+    else
+        (cd $LOC/card_$1 && tmux new-window -d -n card-$1 -t cosmic: './cosmic_input' ; sleep 0.5; pgrep -n cosmic_input >$PIDFILE)
+    fi
+    echo "Mining $TOKEN token on card $1"
+}
+
+function usage() {
+    COMM=`basename $0`
+    if [[ $NUM_CARDS -lt 2 ]] ; then
+        echo "usage: $COMM [spring|summer|autumn|winter]" 
+    else
+        echo "usage: $COMM [card number] [spring|summer|autumn|winter]" 
+    fi
+}
+
+
+if [[ "$1" == "-h" ]] ; then
+    usage
+fi
+
+
+if [[ $# -eq 0 ]] ; then
+    # With no arguments, run on cosmic miner on all cards
+    for i in $(seq 1 $NUM_CARDS) ; do
+        run_on_card $i $2
+    done
+else
+    if [[ $NUM_CARDS -lt 2 ]] ; then
+        if [[ ! ${TOKENS[*]} =~ (^|[[:space:]])$1($|[[:space:]]) ]]; then
+            usage
+            exit
+        fi
+        run_on_card 1 $1
+    else
+        # If more than two cards, first arg must be a valid card number
+        if [[ ! $1 =~ ^-?[0-9]+$ ]] ; then
+            usage
+            exit 1
+        fi
+        if [[ "$1" -gt "$NUM_CARDS" || $1 -lt 1 ]] ; then
+            usage
+            exit
+        fi
+        if [[ ! ${TOKENS[*]} =~ (^|[[:space:]])$2($|[[:space:]]) ]]; then
+            usage
+            exit
+        fi
+        run_on_card $1 $2
+    fi
+fi

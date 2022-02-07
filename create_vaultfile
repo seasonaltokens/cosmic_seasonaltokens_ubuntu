@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+
+import json
+import os.path
+import sys
+
+try:
+    pools = {}
+    pools['spring'] = 'http://pool.seasonaltokens.org:5001'
+    pools['summer'] = 'http://pool.seasonaltokens.org:5002'
+    pools['autumn'] = 'http://pool.seasonaltokens.org:5003'
+    pools['winter'] = 'http://pool.seasonaltokens.org:5004'
+
+    vault_location = os.path.join(os.path.expanduser("~"), '.0xbitcoin', '0xbtcminerstore')
+    vault_path = os.path.join(vault_location, 'vaultdata')                                
+    if os.path.isfile(vault_path):
+        #response = input("A vault file for this user already exists. Overwrite (Y/n)? ")
+        #if response != "Y":
+        #    print("Not overwriting vault file.")
+        sys.exit(1)
+
+
+    try:
+        os.makedirs(vault_location)
+    except FileExistsError:
+        pass
+
+    valid_address = False
+    while not valid_address:
+        ethereum_address = input("Please enter the ethereum address to mine tokens to: ")
+        if ethereum_address[0:2] != "0x":
+            ethereum_address = "0x" + ethereum_address
+
+        if len(ethereum_address) != 42:
+            print("Ethereum address must be 40 hex digits in length.")
+            continue
+
+        try:
+            int(ethereum_address, 16)
+            valid_address = True
+        except:
+            print("Ethereum address must be in hexidecimal.")
+
+    valid_token = False
+    while not valid_token:
+        token = input("Please select a token to mine (spring/summer/autumn/winter): ")
+
+        if token not in ("spring","summer","autumn","winter"):
+            print(token + " is not a valid token.")
+        else:
+            valid_token = True
+
+    pool = pools[token]
+
+    vault_data = {"vault": {"data": {"name": "0xbtc datastore", "account_list": [{"address": ethereum_address, "privateKey": None, "accountType": "readonly"}], "mining_gas_price": 1, "cpu_threads": 1, "web3_provider_url": "", "selected_contract_address": "0x763a8DD89A1970176be853c79417020EB4E9a3Ac", "selected_account_address": ethereum_address, "mining_pool_url": pool}, "version": 2}}
+
+    with open(vault_path, "w") as vault_file:
+        json.dump(vault_data, vault_file)
+
+except KeyboardInterrupt:
+    exit(1)

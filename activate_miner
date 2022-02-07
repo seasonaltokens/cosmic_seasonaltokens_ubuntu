@@ -1,0 +1,167 @@
+#!/bin/bash
+
+CMLOC="https://bitbucket.org/LieutenantTofu/cosmic-v3/downloads/cosmic-v3.4-linux.tar.gz"
+VAULT_CREATOR="create_vaultfile"
+BLACKLIST="/etc/modprobe.d/blacklist-nouveau.conf"
+MODULES="/etc/initramfs-tools/modules"
+CRON="/etc/cron.d/cosmic"
+DIRTY_INITRAMFS=0
+ORIGINAL=0
+BD=$(readlink -f `dirname $0`)
+LOGFILE="$BD/.install.log"
+ACTION="install"
+
+
+function install_cm () {
+    echo "Installing COSMiC miner. This will activate the miner to run on reboot."
+
+    CM_LAUNCH="$BD/run_cosmic"
+    USER=`whoami`
+    if [[ "$USER" != "root" ]] ; then
+        echo "Additional permissions may be requested to install as a normal user."
+    fi
+
+    # Add nouveau module to the module blacklist to prevent it from being insmoded
+    echo "blacklist nouveau" > `basename $BLACKLIST`
+    sudo mv `basename $BLACKLIST` $BLACKLIST
+
+    # Check whether nvidia module already appears in module list.
+    NVIDIA_IN_INITRAMFS=`sed -n '/^nvidia$/p' $MODULES`
+
+    if [[ "$NVIDIA_IN_INITRAMFS" == "" ]] ; then
+        # Add nvidia module to the initramfs to prevent nouveau from being loaded early
+        cp $MODULES `basename $MODULES`
+        echo "nvidia" >> `basename $MODULES`
+        sudo mv `basename $MODULES` $MODULES
+        DIRTY_INITRAMFS=1
+    fi
+
+    # Create a crontab entry to launch miner on reboot
+    echo "@reboot $USER $CM_LAUNCH >/dev/null 2>&1" > `basename $CRON`
+    sudo mv `basename $CRON` $CRON
+
+    sudo chmod 0644 $BLACKLIST
+    sudo chmod 0644 $CRON
+    sudo chown root:root $BLACKLIST $CRON $MODULES
+
+    sudo apt-get -q=2 update >>$LOGFILE 2>&1
+
+    # check whether nvidia module is currently installed
+    NVIDIA_INSTALLED=`find /lib/modules/$(uname -r) -type f -name 'nvidia.ko'`
+    if [[ "$NVIDIA_INSTALLED" == "" ]] ; then
+        # check whether gdm is installed - if so, we install standard nvidia driver, otherwise headless
+        DISPLAYMANAGER=`dpkg-query -s gdm3 2>>$LOGFILE`
+        if [[ "$?" == 1 ]] ; then
+            echo "No nvidia driver currently installed, installing server driver. Please be patient ..."
+            NVIDIA_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-driver-...-server" | sort | tail -1 | cut -d\  -f1`
+        else
+            echo "No nvidia driver currently installed, installing desktop driver. Please be patient ..."
+            NVIDIA_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-driver-... " | sort | tail -1 | cut -d\  -f1`
+        fi
+
+        sudo apt-get -q=2 install ${NVIDIA_DRIVER} >>$LOGFILE 2>&1
+
+        # The initramfs will have been recompiled when installing the nvidia driver. Don't bother recompiling.
+        DIRTY_INITRAMFS=0
+    fi
+
+    if [ $DIRTY_INITRAMFS -eq 1 ] ; then
+        echo "Updating the initramfs ..."
+        sudo update-initramfs -u -k all >>$LOGFILE 2>&1
+    fi
+
+    # tmux is required as the run script runs cosmicminer inside a tmux session
+    sudo apt-get -q=2 install tmux >>$LOGFILE 2>&1
+
+    (
+        cd $BD
+        # optionally, install the original LieutenantTofu binary
+        if [ $ORIGINAL -eq 1 ] ; then
+            echo "Downloading and installing cosmic miner from original server ..."
+            wget -q "$CMLOC" -O ltcm.tar.gz
+            tar xf "ltcm.tar.gz" 
+            mv cosmic-v3.4-linux seasonaltokens-cosmic-v3.4-linux
+            mv ltcm/cosmic-v3.4-linux .
+            rmdir ltcm
+            rm ltcm.tar.gz
+        fi
+
+        # create script to run the miner 
+        NUM_CARDS=`lspci | grep NVIDIA | grep VGA | wc -l`
+        if [[ $NUM_CARDS -gt 1 ]] ; then
+            for i in $(seq 2 $NUM_CARDS) ; do
+                mkdir -p card_$i
+                j=$((i-1))
+                echo "24 $j" > card_$i/0xbtc.conf
+                cp card_1/cosmic_input card_$i/
+            done
+        fi
+
+    )
+
+    # generate a vault file that points to the seasonal tokens
+    $BD/create_vaultfile
+
+    echo "Cosmic Miner 3.4 installed. Please reboot to begin mining."
+}
+
+function uninstall_cm () {
+    echo "Uninstalling COSMiC. This will stop COSMiC miner from starting on reboot."
+    echo "Stopping any running COSMiC instances."
+    $BD/stop_cosmic >>$LOGFILE 2>&1
+    sudo rm $BLACKLIST >>$LOGFILE 2>&1
+    sudo rm $CRON >>$LOGFILE 2>&1
+
+    ## leaving the nvidia driver in the initramfs. Removing it probably introduces
+    ## more problems than it solves.
+    # sudo sed -n '/^nvidia$/d' /etc/initramfs-tools/modules
+    # sudo update-initramfs -u -k all >>$LOGFILE
+    echo "Done."
+}
+
+function usage () {
+    BIN=`basename $0`
+    echo "Usage: $BIN [options]" >&2
+    echo "" >&2
+    echo "        -h|--help               this message" >&2
+    echo "        -o|--original           use the original LieutenantTofu COSMiC miner" >&2
+    echo "        -d|--deactivate         deactivate the miner from starting on reboot" >&2
+}
+
+while (( "$#" )); do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -o|--original)
+      ORIGINAL=1
+      shift
+      ;;
+    -d|--deactivate)
+      ACTION="uninstall"
+      shift
+      ;;
+    -*|--*=) # unsupported flags
+      echo "Error: Unsupported option $1" >&2
+      usage
+      exit 1
+      ;;
+    *)
+      echo "Error: Unsupported option $1" >&2
+      usage
+      exit 1
+      ;;
+   esac
+done
+
+case $ACTION in
+    install)
+        install_cm
+        ;;
+    uninstall)
+        uninstall_cm
+        ;;
+esac
+
+
