@@ -3,18 +3,29 @@
 NUM_CARDS=`lspci | grep NVIDIA | grep VGA | wc -l`
 LOC=`dirname $(readlink -f $0)`
 
+function enable_all_cards() {
+    if [[ $NUM_CARDS -gt 1 ]] ; then
+        for i in $(seq 2 $NUM_CARDS) ; do
+            mkdir -p card_$i
+            j=$((i-1))
+            echo "24 $j" > card_$i/0xbtc.conf
+            cp card_1/cosmic_input card_$i/
+        done
+    fi
+}
+
 function is_pid_running() {
     if [[ $# -lt 2 ]] ; then
         return 2
     fi
 
-    CPID=$1
-    COSMIC_INSTANCES=`pgrep $2`
-    for p in $COSMIC_INSTANCES ; do
-        if [[ $p == $CPID ]] ; then
-            return 0
-        fi
-    done
+    CPID="$1"
+    if [[ "$CPID" != "" ]] ; then
+		comm=$(basename `ps -p $CPID -o command -h | cut -d\  -f2`)
+		if [[ "$comm" == "$2" ]] ; then
+			return 0
+		fi
+    fi
     return 1
 }
 
@@ -24,18 +35,15 @@ function stop_miner_on_card() {
     COSMIC_STOPPED=0
 
     if [[ ! -e $PIDFILE ]] ; then
+        echo "Miner not running on card $1."
         return 0
     fi
 
     p=`cat $PIDFILE`
     is_pid_running $p cosmic_input
     if [[ $? -eq 0 ]] ; then
+        echo "Stopping miner on card $1."
         kill -15 $p 
-        if [[ $? -eq 0 ]] ; then
-            rm $PIDFILE
-        fi
-    else
-        rm $PIDFILE
     fi
     return 1
 }
@@ -45,6 +53,7 @@ function usage() {
     echo "usage: $COMM [card number]" 
 }
 
+enable_all_cards
 
 if [[ $# -eq 0 ]] ; then
     # With no arguments, run on cosmic miner on all cards
