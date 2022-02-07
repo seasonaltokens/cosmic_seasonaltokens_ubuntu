@@ -6,7 +6,9 @@ import time
 import signal
 import sys
 
-COSMIC_BINARY = "../cosmic-v3.4-linux"
+LOC = os.path.abspath(os.path.dirname(sys.argv[0]))
+COSMIC_BINARY = os.path.join(LOC, "../cosmic-v3.4-linux")
+PIDFILE = os.path.join(LOC, "cosmic.pid")
 
 pids = []
 
@@ -25,6 +27,7 @@ def kill_process(pid):
 def exit_gracefully(signal_recieved, frame):
     for pid in pids:
         kill_process(pid)
+    os.unlink(PIDFILE)
     exit(0)
 
 
@@ -34,7 +37,9 @@ signal.signal(signal.SIGHUP, exit_gracefully)
 signal.signal(signal.SIGQUIT, exit_gracefully)
 
 try:
-    LOC = os.path.abspath(os.path.dirname(sys.argv[0]))
+
+    with open(PIDFILE, "w") as pidfile:
+        pidfile.write(str(os.getpid()))
 
     while True:
         proc = subprocess.Popen(COSMIC_BINARY, cwd=LOC, shell=False,
