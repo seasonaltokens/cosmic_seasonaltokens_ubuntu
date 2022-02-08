@@ -22,7 +22,7 @@ function run_on_card () {
 
     if [[ -e $PIDFILE ]] ; then
         CPID=`cat $PIDFILE`
-        if [[ "$CPID" != "" ]] ; then
+        if [[ $CPID =~ ^-?[0-9]+$ ]] ; then
             comm=$(basename `ps -p $CPID -o command -h | cut -d\  -f2`)
             if [[ "$comm" == "cosmic_input" ]] ; then
                 kill -15 $CPID

@@ -26,6 +26,10 @@ function is_pid_running() {
     MYPID=$1
     if [[ -e $PIDFILE ]] ; then
         CPID=`cat $PIDFILE`
+        if [[ ! $CPID =~ ^-?[0-9]+$ ]] ; then
+            return 1
+        fi
+
         comm=$(basename `ps -p $CPID -o command -h | cut -d\  -f2`)
         if [[ $comm == "$2" ]] ; then
             return 0
