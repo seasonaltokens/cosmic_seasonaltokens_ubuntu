@@ -12,6 +12,10 @@ LOGFILE="$BD/.install.log"
 ACTION="install"
 
 
+function is_package_installed() {
+    ! dpkg-query -s $1 >/dev/null 2>&1 ; echo $?
+}
+
 function install_cm () {
     echo "Installing COSMiC miner. This will activate the miner to run on reboot."
 
@@ -63,8 +67,74 @@ function install_cm () {
 
         # The initramfs will have been recompiled when installing the nvidia driver. Don't bother recompiling.
         DIRTY_INITRAMFS=0
+    else
+        # NVIDIA drivers are already present on the system. Check for very old
+        # drivers that may cause mining issues.
+
+        # First, attempt to get the version from apt
+        NVIDIA_VERSION=`dpkg-query -l nvidia-kernel-common-* | grep -v ^rc | grep "amd64" | tr -s ' ' | cut -d\  -f3 | cut -d. -f1`
+
+        # If that fails, run nvidia-smi
+        if [[ ! $NVIDIA_VERSION ]] ; then
+            # Note that nvidia-smi won't work until the nvidia drivers are loaded
+            NVIDIA_VERSION=`nvidia-smi --query-gpu=driver_version --format=csv | tail -1 | cut -d. -f1,2`
+        fi
+
+        if [[ ! $NVIDIA_VERSION ]] ; then
+            echo "Attempting to load the nvidia driver."
+            sudo modprobe nvidia >/dev/null 2>&1
+            if [[ ! $? ]] ; then
+                echo "NVIDIA driver could not be loaded. The installed driver may not be the correct one for your card."
+            else
+                NVIDIA_VERSION=`nvidia-smi --query-gpu=driver_version --format=csv | tail -1 | cut -d. -f1,2`
+            fi
+        fi
+
+        DRIVER_PACKAGE=""
+        DESKTOP_DRIVER_PACKAGE=`is_package_installed nvidia-driver-${NVIDIA_VERSION}`
+        SERVER_DRIVER_PACKAGE=`is_package_installed nvidia-driver-${NVIDIA_VERSION}-server`
+        OLD_SERVER_DRIVER_PACKAGE=`is_package_installed nvidia-headless-${NVIDIA_VERSION}`
+
+        if [[ $DESKTOP_DRIVER_PACKAGE -eq 1 ]] ; then
+           AVAILABLE_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-driver-..." | sort | tail -1 | cut -d\  -f1`
+           AVAILABLE_VERSION=`echo $AVAILABLE_DRIVER | cut -d- -f3`
+           ALL_DRIVER_PACKAGES="$AVAILABLE_DRIVER nvidia-utils-$AVAILABLE_VERSION"
+        elif [[ $SERVER_DRIVER_PACKAGE -eq 1 ]] || [[ $OLD_SERVER_DRIVER_PACKAGE -eq 1 ]] ; then
+           AVAILABLE_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-headless-... " | sort | tail -1 | cut -d\  -f1`
+           AVAILABLE_VERSION=`echo $AVAILABLE_DRIVER | cut -d- -f3`
+           ALL_DRIVER_PACKAGES="$AVAILABLE_DRIVER nvidia-utils-$AVAILABLE_VERSION"
+        fi
+
+        echo "Current NVIDIA Driver version: $NVIDIA_VERSION"
+
+        if [[ $NVIDIA_VERSION -le 390 ]] ; then
+            if [[ $AVAILABLE_DRIVER == "" ]] ; then
+                echo "Unable to update NVIDIA drivers outside of packaging system."
+            else
+                echo "Available Driver version: $AVAILABLE_VERSION"
+                echo "Your installed NVIDIA drivers are out-of-date and may prevent you from mining."
+                if [[ $NVIDIA_VERSION -le $AVAILABLE_VERSION ]] ; then
+                    read -p "Would you like to install version $AVAILABLE_VERSION [Y/n]? " ret
+                    if [[ "$ret" == "Y" ]] ; then
+                        echo "Installing package $AVAILABLE_DRIVER."
+                        sudo apt-get -q=2 install $ALL_DRIVER_PACKAGES >/dev/null 2>&1
+                        if [[ ! $? ]] ; then
+                            ret=`is_package_installed $AVAILABLE_DRIVER`
+                            if [[ $? ]] ; then
+                                echo "NVIDIA $AVAILABLE_VERSION driver successfully installed." 
+                            else
+                                echo "NVIDIA $AVAILABLE_VERSION driver could not be installed." 
+                            fi
+                        else
+                            echo "NVIDIA $AVAILABLE_VERSION driver could not be installed." 
+                        fi
+                    fi
+                fi
+            fi
+        fi
     fi
 
+    DIRTY_INITRAMFS=0 
     if [ $DIRTY_INITRAMFS -eq 1 ] ; then
         echo "Updating the initramfs ..."
         sudo update-initramfs -u -k all >>$LOGFILE 2>&1
