@@ -117,11 +117,14 @@ function install_cm () {
                     read -p "Would you like to install version $AVAILABLE_VERSION [Y/n]? " ret
                     if [[ "$ret" == "Y" ]] ; then
                         echo "Installing package $AVAILABLE_DRIVER."
+                        $BD/stop_cosmic >/dev/null
+                        sudo rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia >/dev/null 2>&1
                         sudo apt-get -q=2 install $ALL_DRIVER_PACKAGES >/dev/null 2>&1
                         if [[ ! $? ]] ; then
                             ret=`is_package_installed $AVAILABLE_DRIVER`
                             if [[ $? ]] ; then
                                 echo "NVIDIA $AVAILABLE_VERSION driver successfully installed." 
+                                sudo modprobe nvidia
                             else
                                 echo "NVIDIA $AVAILABLE_VERSION driver could not be installed." 
                             fi
