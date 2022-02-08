@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
 import os
-import subprocess
-import time
 import signal
+import subprocess
 import sys
+import time
 
 LOC = os.path.abspath(os.path.dirname(sys.argv[0]))
 COSMIC_BINARY = os.path.join(LOC, "../cosmic-v3.4-linux")
 PIDFILE = os.path.join(LOC, "cosmic.pid")
+TIME_THRESHOLD = 5
 
 pids = []
 
@@ -28,7 +29,7 @@ def exit_gracefully(signal_recieved, frame):
     for pid in pids:
         kill_process(pid)
     os.unlink(PIDFILE)
-    exit(0)
+    sys.exit(0)
 
 
 signal.signal(signal.SIGTERM, exit_gracefully)
@@ -42,15 +43,21 @@ try:
         pidfile.write(str(os.getpid()))
 
     while True:
+        start_time = time.time()
         proc = subprocess.Popen(COSMIC_BINARY, cwd=LOC, shell=False,
                                 stdin=subprocess.PIPE)
         pids = [proc.pid]
         time.sleep(1)
         proc.communicate(b"pool mine cuda")
         proc.wait()
+        end_time = time.time()
+        if end_time - start_time < TIME_THRESHOLD:
+            os.system('clear')
+            print("Cosmic miner is crashing. Check your NVIDIA driver version.")
+            break
         os.system('clear')
         print("Restarting miner.")
         time.sleep(5)
 
 except KeyboardInterrupt:
-    exit_gracefully(None,None)
+    exit_gracefully(None, None)
