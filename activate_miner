@@ -77,7 +77,7 @@ function install_cm () {
         # If that fails, run nvidia-smi
         if [[ ! $NVIDIA_VERSION ]] ; then
             # Note that nvidia-smi won't work until the nvidia drivers are loaded
-            NVIDIA_VERSION=`nvidia-smi --query-gpu=driver_version --format=csv | tail -1 | cut -d. -f1,2`
+            NVIDIA_VERSION=`nvidia-smi --query-gpu=driver_version --format=csv | tail -1 | cut -d. -f1`
         fi
 
         if [[ ! $NVIDIA_VERSION ]] ; then
