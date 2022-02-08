@@ -96,10 +96,17 @@ function install_cm () {
         OLD_SERVER_DRIVER_PACKAGE=`is_package_installed nvidia-headless-${NVIDIA_VERSION}`
 
         if [[ $DESKTOP_DRIVER_PACKAGE -eq 1 ]] ; then
+           DRIVER_PACKAGE=$DESKTOP_DRIVER_PACKAGE
            AVAILABLE_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-driver-..." | sort | tail -1 | cut -d\  -f1`
            AVAILABLE_VERSION=`echo $AVAILABLE_DRIVER | cut -d- -f3`
            ALL_DRIVER_PACKAGES="$AVAILABLE_DRIVER nvidia-utils-$AVAILABLE_VERSION"
-        elif [[ $SERVER_DRIVER_PACKAGE -eq 1 ]] || [[ $OLD_SERVER_DRIVER_PACKAGE -eq 1 ]] ; then
+        elif [[ $SERVER_DRIVER_PACKAGE -eq 1 ]] ; then
+           DRIVER_PACKAGE=$SERVER_DRIVER_PACKAGE
+           AVAILABLE_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-headless-... " | sort | tail -1 | cut -d\  -f1`
+           AVAILABLE_VERSION=`echo $AVAILABLE_DRIVER | cut -d- -f3`
+           ALL_DRIVER_PACKAGES="$AVAILABLE_DRIVER nvidia-utils-$AVAILABLE_VERSION"
+        elif [[ $OLD_SERVER_DRIVER_PACKAGE -eq 1 ]] ; then
+           DRIVER_PACKAGE=$OLD_SERVER_DRIVER_PACKAGE
            AVAILABLE_DRIVER=`apt-cache search nvidia-driver- | grep "^nvidia-headless-... " | sort | tail -1 | cut -d\  -f1`
            AVAILABLE_VERSION=`echo $AVAILABLE_DRIVER | cut -d- -f3`
            ALL_DRIVER_PACKAGES="$AVAILABLE_DRIVER nvidia-utils-$AVAILABLE_VERSION"
@@ -119,12 +126,13 @@ function install_cm () {
                         echo "Installing package $AVAILABLE_DRIVER."
                         $BD/stop_cosmic >/dev/null
                         sudo rmmod nvidia_uvm nvidia_drm nvidia_modeset nvidia >/dev/null 2>&1
+                        sudo apt-get -q=2 remove $DRIVER_PACKAGE >/dev/null 2>&1
                         sudo apt-get -q=2 install $ALL_DRIVER_PACKAGES >/dev/null 2>&1
-                        if [[ ! $? ]] ; then
+                        if [[ $? -eq 0 ]] ; then
                             ret=`is_package_installed $AVAILABLE_DRIVER`
-                            if [[ $? ]] ; then
+                            if [[ $ret ]] ; then
                                 echo "NVIDIA $AVAILABLE_VERSION driver successfully installed." 
-                                sudo modprobe nvidia
+                                sudo modprobe nvidia >/dev/null 2>&1
                             else
                                 echo "NVIDIA $AVAILABLE_VERSION driver could not be installed." 
                             fi
