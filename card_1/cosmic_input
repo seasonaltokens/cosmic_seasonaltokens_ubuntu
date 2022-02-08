@@ -54,8 +54,7 @@ try:
         if end_time - start_time < TIME_THRESHOLD:
             os.system('clear')
             print("Cosmic miner is crashing. Check your NVIDIA driver version.")
-            break
-        os.system('clear')
+            exit_gracefully(None, None)
         print("Restarting miner.")
         time.sleep(5)
 
