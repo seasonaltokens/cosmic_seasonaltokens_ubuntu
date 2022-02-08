@@ -72,14 +72,16 @@ fi
 
 enable_all_cards
 
-`nvidia-smi >/dev/null 2>&1`
-DRIVER_LOADED="$?"
+lsmod | grep nvidia >/dev/null 2>&1
+if [[ $? -gt 0 ]] ; then
+    `nvidia-smi >/dev/null 2>&1`
+    DRIVER_LOADED="$?"
 
-if [[ $DRIVER_LOADED -gt 0 ]] ; then
-    echo "NVIDIA driver could not be loaded." 
-    exit
+    if [[ $DRIVER_LOADED -gt 0 ]] ; then
+        echo "NVIDIA driver could not be loaded." 
+        exit
+    fi
 fi
-
 
 if [[ $# -eq 0 ]] ; then
     # With no arguments, run on cosmic miner on all cards
