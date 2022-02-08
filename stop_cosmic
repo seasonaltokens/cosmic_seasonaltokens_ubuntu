@@ -21,10 +21,13 @@ function is_pid_running() {
 
     CPID="$1"
     if [[ $CPID =~ ^-?[0-9]+$ ]] ; then
-		comm=$(basename `ps -p $CPID -o command -h | cut -d\  -f2`)
-		if [[ "$comm" == "$2" ]] ; then
-			return 0
-		fi
+        COMM_FROM_PS=`ps -p $CPID -o command -h | cut -d\  -f2`
+        if [[ $COMM_FROM_PS != "" ]] ; then
+            comm=$(basename $COMM_FROM_PS)
+            if [[ "$comm" == "$2" ]] ; then
+                return 0
+            fi
+        fi
     fi
     return 1
 }

@@ -30,11 +30,14 @@ function is_pid_running() {
             return 1
         fi
 
-        comm=$(basename `ps -p $CPID -o command -h | cut -d\  -f2`)
-        if [[ $comm == "$2" ]] ; then
-            return 0
-        else
-            return 0
+        COMM_FROM_PS=`ps -p $CPID -o command -h | cut -d\  -f2`
+        if [[ $COMM_FROM_PS != "" ]] ; then
+            comm=$(basename $COMM_FROM_PS)
+            if [[ $comm == "$2" ]] ; then
+                return 0
+            else
+                return 1
+            fi
         fi
     fi
     return 1
